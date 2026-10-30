@@ -18,6 +18,7 @@ jobs:
           fetch-depth: 0
       - name: Install gitleaks
         env:
+          # renovate: datasource=github-releases depName=gitleaks/gitleaks extractVersion=^v(?<version>.*)$
           GITLEAKS_VERSION: 8.24.3
         run: |
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
@@ -39,3 +40,11 @@ jobs:
         run: |
           sed 's#op://[^ ]*#ci-dummy#' .env.template > .env
           docker compose config --quiet
+
+  # Une config Renovate invalide ne casse rien de visible : Renovate s'arrête et ouvre une issue.
+  renovate-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: renovate-config-validator
+        run: npx --yes --package renovate -- renovate-config-validator --strict
