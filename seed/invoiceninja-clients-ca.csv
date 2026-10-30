@@ -1,0 +1,6 @@
+numero_client,nom,courriel,telephone,pays,devise,dossier,notes
+CA-C-0001,Julie TREMBLAY,julie.tremblay@example.com,+1 514-555-0101,Canada,CAD,CA-2026-0001,FICTIF - donnees de test
+CA-C-0002,Moussa DIALLO,moussa.diallo@example.com,+1 514-555-0102,Canada,CAD,CA-2026-0002,FICTIF - donnees de test
+CA-C-0003,Thi NGUYEN,thi.nguyen@example.com,+1 418-555-0103,Canada,CAD,CA-2026-0003,FICTIF - donnees de test
+CA-C-0004,Pierre LEBLANC,pierre.leblanc@example.com,+1 438-555-0104,Canada,CAD,CA-2026-0004,FICTIF - donnees de test
+CA-C-0005,Yasmine HADDAD,yasmine.haddad@example.com,+1 514-555-0105,Canada,CAD,CA-2026-0005,FICTIF - donnees de test

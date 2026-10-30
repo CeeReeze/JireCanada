@@ -1,0 +1,11 @@
+dossier,branche,equipe,nom,prenom,programme,statut,date_ouverture,date_fermeture,dossier_lie,facture_par,courriel,telephone,notes
+CA-2026-0001,CA,Canada,TREMBLAY,Julie,Entree express,Mandat envoyé,2026-09-25,,,CA,julie.tremblay@example.com,+1 514-555-0101,FICTIF - donnees de test
+CA-2026-0002,CA,Canada,DIALLO,Moussa,Parrainage familial,Soumis IRCC,2026-02-03,,CI-2026-0004,CA,moussa.diallo@example.com,+1 514-555-0102,FICTIF - donnees de test
+CA-2026-0003,CA,Canada,NGUYEN,Thi,PEQ,Fermé – approuvé,2026-01-12,2026-06-30,,CA,thi.nguyen@example.com,+1 418-555-0103,FICTIF - donnees de test
+CA-2026-0004,CA,Canada,LEBLANC,Pierre,Permis de travail,Collecte de pièces,2026-07-14,,,CA,pierre.leblanc@example.com,+1 438-555-0104,FICTIF - donnees de test
+CA-2026-0005,CA,Canada,HADDAD,Yasmine,Visa visiteur,Fermé – refusé,2026-03-02,2026-08-15,,CA,yasmine.haddad@example.com,+1 514-555-0105,FICTIF - donnees de test
+CI-2026-0001,CI,Cote-d-Ivoire,KOUAME,Ange,Permis etudes,Mandat signé,2026-09-08,,,CI,ange.kouame@example.com,+225 00 11 22 33 01,FICTIF - donnees de test
+CI-2026-0002,CI,Cote-d-Ivoire,BAMBA,Mariam,Entree express,En traitement,2026-05-19,,,CI,mariam.bamba@example.com,+225 00 11 22 33 02,FICTIF - donnees de test
+CI-2026-0003,CI,Cote-d-Ivoire,YAPI,Serge,Permis etudes,Fermé – approuvé,2026-01-20,2026-07-10,,CI,serge.yapi@example.com,+225 00 11 22 33 03,FICTIF - donnees de test
+CI-2026-0004,CI,Cote-d-Ivoire,DIALLO,Aminata,Parrainage familial,Soumis IRCC,2026-02-03,,CA-2026-0002,CA,aminata.diallo@example.com,+225 00 11 22 33 04,FICTIF - donnees de test
+CI-2026-0005,CI,Cote-d-Ivoire,OUATTARA,Ibrahim,Visa visiteur,Collecte de pièces,2026-08-04,,,CI,ibrahim.ouattara@example.com,+225 00 11 22 33 05,FICTIF - donnees de test
