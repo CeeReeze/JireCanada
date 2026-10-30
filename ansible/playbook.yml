@@ -1,0 +1,138 @@
+---
+# Préparation de l'hôte de la stack jire (aujourd'hui drogon-bazzite, sous Bazzite).
+#
+#   ansible-galaxy collection install -r ansible/requirements.yml
+#   ansible-playbook -i ansible/inventory.yml ansible/playbook.yml --check --diff
+#
+# Ne démarre aucun conteneur et ne touche ni à Tailscale ni à 1Password.
+# Bazzite est un système immuable (rpm-ostree) : aucun paquet n'est installé ici,
+# /mnt pointe vers /var/mnt, donc tous les chemins de montage utilisent /var/mnt.
+
+- name: Hôte de la stack jire
+  hosts: all
+  become: true
+  # Les chemins et la bascule NAS viennent de l'inventaire (inventory.example.yml) :
+  # des `vars` de play les écraseraient, Ansible leur donnant priorité sur l'inventaire.
+  vars:
+    jire_nas_options: >-
+      vers=4.1,hard,_netdev,noauto,x-systemd.automount,x-systemd.mount-timeout=30,
+      x-systemd.requires=tailscaled.service,x-systemd.after=tailscaled.service
+
+  tasks:
+    - name: Variables d'inventaire requises
+      ansible.builtin.assert:
+        that:
+          - jire_state is defined
+          - jire_cache is defined
+          - jire_files_local is defined
+          - jire_nas_enabled is defined
+          - jire_nas_mountpoint is defined
+          - not (jire_nas_enabled | bool) or (jire_nas_export | default('') | length > 0)
+        fail_msg: "Copier inventory.example.yml en inventory.yml et renseigner les variables jire_*"
+
+    # ── Durcissement des répertoires ──
+    - name: État local (BD, config) en 0750, jamais sur NFS
+      ansible.builtin.file:
+        path: "{{ jire_state }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Cache jetable
+      ansible.builtin.file:
+        path: "{{ jire_cache }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Racine locale des fichiers clients (avant bascule NAS)
+      ansible.builtin.file:
+        path: "{{ jire_files_local }}"
+        state: directory
+        mode: "0770"
+
+    - name: Vérifier que l'état n'est pas sur un système de fichiers réseau
+      ansible.builtin.command: findmnt --noheadings --output FSTYPE --target {{ jire_state }}
+      register: jire_state_fstype
+      changed_when: false
+      check_mode: false
+      failed_when: jire_state_fstype.stdout | trim is search('nfs|cifs|smb|fuse')
+
+    - name: Le .env rendu doit rester en 0600
+      ansible.builtin.find:
+        paths: "{{ playbook_dir }}/../hosts/jire"
+        patterns: ".env"
+        hidden: true
+      delegate_to: localhost
+      become: false
+      register: jire_env_files
+
+    - name: Refuser un .env lisible par d'autres
+      ansible.builtin.assert:
+        that: (item.mode | int(base=8)) % 64 == 0
+        fail_msg: "{{ item.path }} doit être en mode 0600 (chmod 600)"
+      loop: "{{ jire_env_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    # ── NAS (NFS 4.1 par Tailscale) ──
+    - name: Préparer le montage NAS
+      when: jire_nas_enabled | bool
+      block:
+        - name: Chercher le client NFS
+          ansible.builtin.stat:
+            path: /usr/sbin/mount.nfs4
+          register: jire_mount_nfs4
+
+        - name: Le client NFS doit être présent dans l'image
+          ansible.builtin.assert:
+            that: jire_mount_nfs4.stat.exists
+            fail_msg: "mount.nfs4 introuvable : nfs-utils manque dans l'image"
+
+        - name: Point de montage
+          ansible.builtin.file:
+            path: "{{ jire_nas_mountpoint }}"
+            state: directory
+            mode: "0755"
+
+        - name: Le point de montage est-il déjà monté ?
+          ansible.builtin.command: mountpoint -q {{ jire_nas_mountpoint }}
+          register: jire_nas_mounted
+          changed_when: false
+          check_mode: false
+          failed_when: false
+
+        - name: Contenu du point de montage
+          ansible.builtin.find:
+            paths: "{{ jire_nas_mountpoint }}"
+            hidden: true
+            file_type: any
+          register: jire_nas_content
+          when: jire_nas_mounted.rc != 0
+
+        - name: Attribut immuable actuel
+          ansible.builtin.command: lsattr -d {{ jire_nas_mountpoint }}
+          register: jire_nas_attr
+          changed_when: false
+          check_mode: false
+          when: jire_nas_mounted.rc != 0
+
+        # chattr +i sur le point de montage VIDE : si le NAS n'est pas monté, rien ne
+        # peut y être écrit par erreur (les écritures échouent au lieu de remplir le disque).
+        - name: Rendre le point de montage vide immuable
+          ansible.builtin.command: chattr +i {{ jire_nas_mountpoint }}
+          when:
+            - jire_nas_mounted.rc != 0
+            - jire_nas_content.matched == 0
+            - "'i' not in (jire_nas_attr.stdout.split() | first)"
+          changed_when: true
+
+        - name: Ligne fstab NFS 4.1 (automount, dépend de tailscaled)
+          ansible.posix.mount:
+            src: "{{ jire_nas_export }}"
+            path: "{{ jire_nas_mountpoint }}"
+            fstype: nfs4
+            opts: "{{ jire_nas_options | replace(' ', '') | replace('\n', '') }}"
+            state: present

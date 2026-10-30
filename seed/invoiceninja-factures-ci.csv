@@ -1,0 +1,8 @@
+numero,dossier,client,type,date,devise,montant_ht,tva_18,total,statut,notes
+CI-F-0001,CI-2026-0001,Ange KOUAME,Acompte,2026-09-08,XOF,360000,64800,424800,Payée,FICTIF - donnees de test
+CI-F-0002,CI-2026-0002,Mariam BAMBA,Acompte,2026-05-19,XOF,600000,108000,708000,Payée,FICTIF - donnees de test
+CI-F-0003,CI-2026-0002,Mariam BAMBA,Étape,2026-07-18,XOF,450000,81000,531000,Envoyée,FICTIF - donnees de test
+CI-F-0004,CI-2026-0003,Serge YAPI,Acompte,2026-01-20,XOF,360000,64800,424800,Payée,FICTIF - donnees de test
+CI-F-0005,CI-2026-0003,Serge YAPI,Étape,2026-03-21,XOF,270000,48600,318600,Payée,FICTIF - donnees de test
+CI-F-0006,CI-2026-0003,Serge YAPI,Solde,2026-07-10,XOF,270000,48600,318600,Payée,FICTIF - donnees de test
+CI-F-0007,CI-2026-0005,Ibrahim OUATTARA,Acompte,2026-08-04,XOF,200000,36000,236000,Payée,FICTIF - donnees de test

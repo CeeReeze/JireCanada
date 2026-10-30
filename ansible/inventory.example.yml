@@ -1,0 +1,15 @@
+---
+# Copier en inventory.yml (ignoré par git si besoin) et adapter.
+all:
+  hosts:
+    jire-host:
+      ansible_host: drogon-bazzite
+      ansible_user: celian
+  vars:
+    jire_state: /data/jire
+    jire_cache: /cache/jire
+    jire_files_local: /data/jire-files
+    # Bascule NAS : voir docs/runbooks/bascule-nas.md avant de passer à true.
+    jire_nas_enabled: false
+    jire_nas_export: "nas.tailnet-jire.ts.net:/volume1/jire"
+    jire_nas_mountpoint: /var/mnt/jire-nas

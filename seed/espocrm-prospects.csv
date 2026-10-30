@@ -1,0 +1,7 @@
+id,branche,equipe,prenom,nom,courriel,telephone,programme_vise,source,statut,date_creation,notes
+P-CA-001,CA,Canada,Marie,Gagnon,marie.gagnon@example.com,+1 514-555-0111,Entree express,Site web,Nouveau,2026-09-02,FICTIF - donnees de test
+P-CA-002,CA,Canada,Luc,Bouchard,luc.bouchard@example.com,+1 418-555-0112,PEQ,Site web,Contacte,2026-09-10,FICTIF - donnees de test
+P-CA-003,CA,Canada,Sofia,Martinez,sofia.martinez@example.com,+1 438-555-0113,Permis de travail,Reference,RDV planifie,2026-09-18,FICTIF - donnees de test
+P-CI-001,CI,Cote-d-Ivoire,Awa,Kone,awa.kone@example.com,+225 00 01 02 03 01,Permis etudes,Site web,Nouveau,2026-09-05,FICTIF - donnees de test
+P-CI-002,CI,Cote-d-Ivoire,Yao,Kouassi,yao.kouassi@example.com,+225 00 01 02 03 02,Entree express,WhatsApp,Contacte,2026-09-12,FICTIF - donnees de test
+P-CI-003,CI,Cote-d-Ivoire,Fatou,Traore,fatou.traore@example.com,+225 00 01 02 03 03,Visa visiteur,Quiz eligibilite,RDV planifie,2026-09-20,FICTIF - donnees de test
