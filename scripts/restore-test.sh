@@ -7,8 +7,10 @@ set -euo pipefail
 
 : "${RESTIC_REPOSITORY:?définir RESTIC_REPOSITORY (op run --env-file=...)}"
 : "${RESTIC_PASSWORD:?définir RESTIC_PASSWORD (op run --env-file=...)}"
-state=${JIRE_STATE:-/data/jire}
-files=${JIRE_FILES:-/data/jire-files}
+# shellcheck source=scripts/_paths.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_paths.sh"
+state=$JIRE_STATE
+files=$JIRE_FILES
 
 target=$(mktemp -d)
 trap 'rm -rf "$target"' EXIT
