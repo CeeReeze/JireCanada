@@ -357,10 +357,18 @@ services:
   # Build lourd : Node 20, jusqu'à 6 Go de RAM (MAX_OLD_SPACE_SIZE), compter 15-30 min.
   caldiy:
     <<: *common
-    image: jire/caldiy:2e412471
+    # Préfixe localhost/ : l'image n'existe que construite ici. Sans lui, un
+    # « docker compose pull » irait chercher jire/caldiy sur Docker Hub, où n'importe
+    # qui peut publier ce nom.
+    image: localhost/jire/caldiy:2e412471
     build:
       context: https://github.com/calcom/cal.diy.git#2e412471fc1f42c662005854a47c48128c479b0a
       dockerfile: Dockerfile
+      # Le Dockerfile amont part de « node:20 » sans digest : ce contexte nommé (BuildKit)
+      # remplace chaque FROM node:20 par l'image épinglée, sans forker le Dockerfile.
+      # Node 20 est en fin de vie (avril 2026) : cette image ne bougera plus.
+      additional_contexts:
+        "node:20": docker-image://node:20@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5
       args:
         NEXT_PUBLIC_WEBAPP_URL: ${CALDIY_URL:-https://rdv.jire.ceereeze.dev}
         CALCOM_TELEMETRY_DISABLED: "1"
@@ -378,8 +386,18 @@ services:
       EMAIL_SERVER_HOST: mailpit
       EMAIL_SERVER_PORT: "1025"
       EMAIL_FROM: rdv@jirecanada.ca
+      EMAIL_FROM_NAME: JIRE
     ports:
       - "127.0.0.1:8085:3000"
     depends_on:
       postgres:
         condition: service_healthy
+    # Remplace celui de l'image (wget sur « / », sans délai de grâce) : /api/version répond
+    # 200 sans BD ni redirection, et le premier démarrage (migrations Prisma + seed de
+    # l'app store) dépasse les 2 min 30 que l'image tolère avant « unhealthy ».
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/version"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5m
+      retries: 5
