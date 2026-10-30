@@ -16,7 +16,9 @@ Le site vitrine vit à part, dans [JireCanada-Website](https://github.com/CeeRee
 | `scripts/` | `render-env.sh` (rend le `.env` via `op inject`), `backup.sh` / `restore-test.sh` (Restic), `seed-dossiers.sh` (arbo des dossiers clients) |
 | `seed/` | CSV FICTIFS pour EspoCRM et Invoice Ninja (clients CA et CI, factures TPS/TVQ et TVA 18 %) |
 | `ansible/` | Préparation de l'hôte : répertoires, garde-fous, montage NFS du NAS (désactivé par défaut) |
-| `.github/workflows/ci.yml` | gitleaks sur tout l'historique + shellcheck, yamllint, `docker compose config` |
+| `.github/workflows/ci.yml` | gitleaks sur tout l'historique + shellcheck, yamllint, `docker compose config`, validation de `renovate.json` |
+| `justfile` | Raccourcis : `just lint` (vérifs de la CI), `render-env`, `backup`, `restore-test`, `seed` |
+| `renovate.json` | Mises à jour des images (digests), du commit Cal.diy, des actions et de gitleaks |
 
 ## La stack
 
@@ -82,4 +84,4 @@ op run --env-file=hosts/jire/restic.env.template -- scripts/restore-test.sh
 | Build Cal.diy | Pas d'image publiée, on build depuis le dépôt au commit `2e412471`. Build lourd, pas encore testé sur l'hôte |
 | Workflow n8n d'intake | Volontairement absent : il créerait des leads EspoCRM en double avec le push direct de `sendLead` côté site |
 | Docs détaillées | `docs/architecture.md` et `docs/runbooks/bascule-nas.md` (cités dans les commentaires) sont à écrire |
-| Outillage | `infra.yml`, `justfile` et `renovate.json` (cité dans le compose) à venir |
+| Outillage | `infra.yml` à venir |

@@ -10,6 +10,8 @@ Docker Compose, scripts Bash, Ansible et des CSV de seed. Le site est dans le d�
 
 ## Vérifications (à lancer avant chaque push, c'est ce que fait la CI)
 
+`just lint` lance tout ce qui suit, plus la validation de `renovate.json`.
+
 ```bash
 shellcheck scripts/*.sh hosts/jire/config/*/*.sh
 yamllint --strict -c .yamllint.yml ansible hosts/jire/docker-compose.yml .github
