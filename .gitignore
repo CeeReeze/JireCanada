@@ -5,3 +5,6 @@
 *.p12
 
 .DS_Store
+
+# Inventaire Ansible réel (hôtes et exports NAS du cabinet)
+ansible/inventory.yml
