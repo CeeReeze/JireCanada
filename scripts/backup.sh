@@ -11,8 +11,10 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 compose=(docker compose -f "$here/../hosts/jire/docker-compose.yml")
-state=${JIRE_STATE:-/data/jire}
-files=${JIRE_FILES:-/data/jire-files}
+# shellcheck source=scripts/_paths.sh
+source "$here/_paths.sh"
+state=$JIRE_STATE
+files=$JIRE_FILES
 
 : "${RESTIC_REPOSITORY:?définir RESTIC_REPOSITORY (op run --env-file=...)}"
 : "${RESTIC_PASSWORD:?définir RESTIC_PASSWORD (op run --env-file=...)}"

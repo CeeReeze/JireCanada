@@ -9,6 +9,12 @@ all:
     jire_state: /data/jire
     jire_cache: /cache/jire
     jire_files_local: /data/jire-files
+    # Groupe partagé par n8n et Nextcloud. Le GID doit être égal à JIRE_FILES_GID
+    # (docker-compose.yml, 2500 par défaut) et, après la bascule, au GID côté NAS.
+    jire_files_group: jire-files
+    jire_files_gid: 2500
+    # Comptes de l'hôte qui écrivent aussi dedans (seed-dossiers.sh sans sudo).
+    jire_files_members: [celian]
     # Bascule NAS : voir docs/runbooks/bascule-nas.md avant de passer à true.
     jire_nas_enabled: false
     jire_nas_export: "nas.tailnet-jire.ts.net:/volume1/jire"

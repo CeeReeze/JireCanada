@@ -15,6 +15,14 @@ if [[ ! -d "$root" ]]; then
   exit 1
 fi
 
+# Fichiers partagés par n8n et Nextcloud via le groupe de la racine (voir ansible/playbook.yml) :
+# rien pour « autres », écriture pour le groupe, même là où l'ACL par défaut manque (NFS).
+umask 0007
+if [[ ! -g "$root" ]]; then
+  echo "seed-dossiers: $root n'a pas le bit setgid : les dossiers ne seront pas dans le groupe" \
+    "partagé (lancer le playbook Ansible d'abord). On continue quand même." >&2
+fi
+
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 csv="$here/../seed/espocrm-clients.csv"
 [[ -f "$csv" ]] || { echo "seed-dossiers: $csv introuvable" >&2; exit 1; }

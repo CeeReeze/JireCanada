@@ -25,6 +25,8 @@
           - jire_state is defined
           - jire_cache is defined
           - jire_files_local is defined
+          - jire_files_group is defined
+          - jire_files_gid is defined
           - jire_nas_enabled is defined
           - jire_nas_mountpoint is defined
           - not (jire_nas_enabled | bool) or (jire_nas_export | default('') | length > 0)
@@ -47,11 +49,39 @@
         group: root
         mode: "0750"
 
+    # ── Fichiers clients : un groupe partagé ──
+    # n8n (uid 1000) et Nextcloud (www-data, uid 33) écrivent au même endroit. Les deux
+    # rejoignent ce groupe (voir docker-compose.yml) ; setgid fait hériter le groupe aux
+    # nouveaux fichiers, l'ACL par défaut leur donne l'écriture de groupe malgré l'umask 022.
+    - name: Groupe des fichiers clients
+      ansible.builtin.group:
+        name: "{{ jire_files_group }}"
+        gid: "{{ jire_files_gid }}"
+        system: true
+
+    - name: Comptes de l'hôte autorisés à écrire dans les fichiers clients
+      ansible.builtin.user:
+        name: "{{ item }}"
+        groups: "{{ jire_files_group }}"
+        append: true
+      loop: "{{ jire_files_members | default([]) }}"
+
     - name: Racine locale des fichiers clients (avant bascule NAS)
       ansible.builtin.file:
         path: "{{ jire_files_local }}"
         state: directory
-        mode: "0770"
+        owner: root
+        group: "{{ jire_files_group }}"
+        mode: "2770"
+
+    - name: Écriture de groupe héritée par tout ce qui sera créé sous la racine
+      ansible.posix.acl:
+        path: "{{ jire_files_local }}"
+        default: true
+        etype: "{{ item }}"
+        permissions: rwx
+        state: present
+      loop: [group, mask]
 
     - name: Vérifier que l'état n'est pas sur un système de fichiers réseau
       ansible.builtin.command: findmnt --noheadings --output FSTYPE --target {{ jire_state }}
