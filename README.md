@@ -67,6 +67,11 @@ op run --env-file=hosts/jire/restic.env.template -- scripts/backup.sh
 op run --env-file=hosts/jire/restic.env.template -- scripts/restore-test.sh
 ```
 
+## Documentation
+
+Architecture, runbooks (bascule NAS, restauration, arrivées et départs, accès d'urgence) et
+points de conformité à valider : voir [`docs/`](docs/README.md).
+
 ## Règles du jeu
 
 - **Aucun secret en clair** : seulement des références `op://JireEnv/...`. Le `.env` rendu
@@ -81,5 +86,4 @@ op run --env-file=hosts/jire/restic.env.template -- scripts/restore-test.sh
 | Droits sur `JIRE_FILES` | n8n (uid 1000) et Nextcloud (uid 33) écrivent au même endroit : il faut un groupe partagé (setgid + ACL ou `group_add`). Pas encore tranché |
 | Build Cal.diy | Pas d'image publiée, on build depuis le dépôt au commit `2e412471`. Build lourd, pas encore testé sur l'hôte |
 | Workflow n8n d'intake | Volontairement absent : il créerait des leads EspoCRM en double avec le push direct de `sendLead` côté site |
-| Docs détaillées | `docs/architecture.md` et `docs/runbooks/bascule-nas.md` (cités dans les commentaires) sont à écrire |
 | Outillage | `infra.yml`, `justfile` et `renovate.json` (cité dans le compose) à venir |
