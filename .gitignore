@@ -1,0 +1,7 @@
+# Secrets rendus (jamais commités : seules les références op:// le sont)
+.env
+.env.*
+!.env.template
+*.p12
+
+.DS_Store
