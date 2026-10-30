@@ -1,0 +1,359 @@
+# Stack « jire » : environnement de TEST du cabinet (données fictives uniquement).
+#
+# Chemins (voir docs/architecture.md) :
+#   ${JIRE_STATE}/<svc>  état (BD, config des apps) : disque local, jamais NFS
+#   ${JIRE_CACHE}/<svc>  cache jetable
+#   ${JIRE_FILES}        fichiers clients : seul chemin qui change lors de la bascule NAS
+#
+# Secrets : .env est rendu depuis .env.template par scripts/render-env.sh
+# (références op://JireEnv/...). Tous les ports sont liés à 127.0.0.1 ; l'exposition
+# passe par Nginx Proxy Manager sur *.jire.ceereeze.dev (tailnet uniquement).
+#
+# Images épinglées par digest, mises à jour par Renovate (renovate.json).
+
+name: jire
+
+x-common: &common
+  restart: unless-stopped
+  networks: [jire]
+  environment: &tz
+    TZ: ${JIRE_TZ:-America/Toronto}
+
+networks:
+  jire:
+    name: jire
+
+services:
+  # ───────────────────────── Bases de données ─────────────────────────
+
+  postgres:
+    <<: *common
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    environment:
+      <<: *tz
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ROOT_PASSWORD:?}
+      # Lus par config/postgres/init-databases.sh (premier démarrage seulement).
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD:?}
+      DOCUMENSO_DB_PASSWORD: ${DOCUMENSO_DB_PASSWORD:?}
+      CALDIY_DB_PASSWORD: ${CALDIY_DB_PASSWORD:?}
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/postgres:/var/lib/postgresql/data
+      - ./config/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mariadb:
+    <<: *common
+    image: mariadb:11.4@sha256:d1891ede5a559f1086f55053bb8cc1569b0298338c4d72d71725a7f74f6ba620
+    environment:
+      <<: *tz
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?}
+      # Lus par config/mariadb/init-databases.sh (premier démarrage seulement).
+      ESPOCRM_DB_PASSWORD: ${ESPOCRM_DB_PASSWORD:?}
+      INVOICENINJA_DB_PASSWORD: ${INVOICENINJA_DB_PASSWORD:?}
+      NEXTCLOUD_DB_PASSWORD: ${NEXTCLOUD_DB_PASSWORD:?}
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/mariadb:/var/lib/mysql
+      - ./config/mariadb/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 20s
+      start_period: 10s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    <<: *common
+    image: redis:8-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
+    volumes:
+      - ${JIRE_CACHE:-/cache/jire}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────── Courriel (test) ─────────────────────────
+
+  # Tout le SMTP de la stack arrive ici : aucun courriel ne sort pendant le test.
+  mailpit:
+    <<: *common
+    image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    environment:
+      <<: *tz
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "5000"
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/mailpit:/data
+    ports:
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ───────────────────────── CRM ─────────────────────────
+
+  espocrm:
+    <<: *common
+    image: espocrm/espocrm:10.0.11-apache@sha256:8e1c7e97e0a1a08953a86af89c3808cb95410b6a5eb487d1e3475d2c7289357d
+    environment:
+      <<: *tz
+      ESPOCRM_DATABASE_HOST: mariadb
+      ESPOCRM_DATABASE_USER: espocrm
+      ESPOCRM_DATABASE_PASSWORD: ${ESPOCRM_DB_PASSWORD:?}
+      ESPOCRM_ADMIN_USERNAME: admin
+      ESPOCRM_ADMIN_PASSWORD: ${ESPOCRM_ADMIN_PASSWORD:?}
+      ESPOCRM_SITE_URL: ${ESPOCRM_SITE_URL:-https://crm.jire.ceereeze.dev}
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/espocrm/data:/var/www/html/data
+      - ${JIRE_STATE:-/data/jire}/espocrm/custom:/var/www/html/custom
+      - ${JIRE_STATE:-/data/jire}/espocrm/client-custom:/var/www/html/client/custom
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bin/command", "app-check"]
+      interval: 60s
+      start_period: 20s
+      timeout: 20s
+      retries: 3
+
+  # Tâches planifiées d'EspoCRM (relances, courriels entrants…).
+  espocrm-daemon:
+    <<: *common
+    image: espocrm/espocrm:10.0.11-apache@sha256:8e1c7e97e0a1a08953a86af89c3808cb95410b6a5eb487d1e3475d2c7289357d
+    entrypoint: docker-daemon.sh
+    volumes_from:
+      - espocrm
+    depends_on:
+      espocrm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bin/command", "app-check"]
+      interval: 180s
+      start_period: 20s
+      timeout: 20s
+      retries: 3
+
+  # ───────────────────────── Automatisation ─────────────────────────
+
+  n8n:
+    <<: *common
+    image: n8nio/n8n:2.46.3@sha256:1a6e1865c5e917945ede13a05b71381e69bbf52f3a60cbaf22a1809760338091
+    environment:
+      <<: *tz
+      GENERIC_TIMEZONE: ${JIRE_TZ:-America/Toronto}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?}
+      N8N_HOST: ${N8N_HOST:-n8n.jire.ceereeze.dev}
+      N8N_PROTOCOL: https
+      # URL publique des webhooks : Tailscale Funnel limité à /webhook (port 10000).
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-https://jire-host.example.ts.net:10000/}
+      N8N_EMAIL_MODE: smtp
+      N8N_SMTP_HOST: mailpit
+      N8N_SMTP_PORT: "1025"
+      N8N_SMTP_SSL: "false"
+      N8N_SMTP_SENDER: n8n@jirecanada.ca
+      # Le workflow d'intake vérifie la signature HMAC du site (crypto + variable d'env).
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      LEAD_WEBHOOK_SECRET: ${LEAD_WEBHOOK_SECRET:?}
+      ESPOCRM_INTERNAL_URL: http://espocrm
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/n8n:/home/node/.n8n
+      - ${JIRE_FILES:-/data/jire-files}:/files
+    ports:
+      - "127.0.0.1:5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5678/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ───────────────────────── Fichiers clients ─────────────────────────
+
+  nextcloud:
+    <<: *common
+    image: nextcloud:34-apache@sha256:515c072ea1cf82ece3503f301fdf75dd5a7148abcc8fa10aaefd5ec56643b703
+    environment:
+      <<: *tz
+      MYSQL_HOST: mariadb
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: ${NEXTCLOUD_DB_PASSWORD:?}
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:?}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_DOMAIN:-cloud.jire.ceereeze.dev}
+      OVERWRITEPROTOCOL: https
+      TRUSTED_PROXIES: ${JIRE_PROXY_CIDR:-172.16.0.0/12}
+      REDIS_HOST: redis
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM_ADDRESS: nextcloud
+      MAIL_DOMAIN: jirecanada.ca
+    volumes:
+      # Le répertoire de données de Nextcloud reste dans l'état local.
+      - ${JIRE_STATE:-/data/jire}/nextcloud:/var/www/html
+      # Ajouté dans Nextcloud par l'app « External storage » (stockage local).
+      - ${JIRE_FILES:-/data/jire-files}:/mnt/jire-files
+    ports:
+      - "127.0.0.1:8082:80"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Tâches de fond Nextcloud (mode cron recommandé par l'image officielle).
+  nextcloud-cron:
+    <<: *common
+    image: nextcloud:34-apache@sha256:515c072ea1cf82ece3503f301fdf75dd5a7148abcc8fa10aaefd5ec56643b703
+    entrypoint: /cron.sh
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/nextcloud:/var/www/html
+      - ${JIRE_FILES:-/data/jire-files}:/mnt/jire-files
+    depends_on:
+      - nextcloud
+
+  # ───────────────────────── Facturation ─────────────────────────
+
+  # Volumes et sidecar nginx repris du docker-compose.yml officiel
+  # (github.com/invoiceninja/dockerfiles, branche debian) : l'emplacement du stockage
+  # n'est documenté que là, pas dans la doc de l'image.
+  invoiceninja:
+    <<: *common
+    image: invoiceninja/invoiceninja-debian:5.13.51@sha256:fe7327d0613360005eee8261cc2b72489cbd9c65a5eb7edbff7b4cda1348e8f9
+    environment:
+      <<: *tz
+      APP_URL: ${INVOICENINJA_URL:-https://factures.jire.ceereeze.dev}
+      APP_KEY: ${INVOICENINJA_APP_KEY:?}
+      APP_ENV: production
+      APP_DEBUG: "false"
+      REQUIRE_HTTPS: "false"
+      TRUSTED_PROXIES: "*"
+      IS_DOCKER: "true"
+      PDF_GENERATOR: snappdf
+      FILESYSTEM_DISK: debian_docker
+      CACHE_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Index Redis séparés de Nextcloud (index 0).
+      REDIS_DB: "1"
+      REDIS_CACHE_DB: "2"
+      DB_CONNECTION: mysql
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_DATABASE: invoiceninja
+      DB_USERNAME: invoiceninja
+      DB_PASSWORD: ${INVOICENINJA_DB_PASSWORD:?}
+      IN_USER_EMAIL: ${INVOICENINJA_ADMIN_EMAIL:-admin@example.com}
+      IN_PASSWORD: ${INVOICENINJA_ADMIN_PASSWORD:?}
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+      MAIL_ENCRYPTION: "null"
+      MAIL_FROM_ADDRESS: factures@jirecanada.ca
+      MAIL_FROM_NAME: JIRE
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/invoiceninja/public:/var/www/html/public
+      - ${JIRE_STATE:-/data/jire}/invoiceninja/storage:/var/www/html/storage
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  invoiceninja-web:
+    <<: *common
+    image: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+    volumes:
+      - ./config/invoiceninja/nginx:/etc/nginx/conf.d:ro
+      - ${JIRE_STATE:-/data/jire}/invoiceninja/public:/var/www/html/public:ro
+      - ${JIRE_STATE:-/data/jire}/invoiceninja/storage:/var/www/html/storage:ro
+    ports:
+      - "127.0.0.1:8083:80"
+    depends_on:
+      - invoiceninja
+
+  # ───────────────────────── Signature ─────────────────────────
+
+  documenso:
+    <<: *common
+    image: documenso/documenso:v2.21.1@sha256:41a69062febc915d1508b87be8c5bbe72ecd3c49232ddcd983490f5f7832f053
+    environment:
+      <<: *tz
+      PORT: "3000"
+      NEXTAUTH_SECRET: ${DOCUMENSO_NEXTAUTH_SECRET:?}
+      NEXT_PRIVATE_ENCRYPTION_KEY: ${DOCUMENSO_ENCRYPTION_KEY:?}
+      NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY: ${DOCUMENSO_ENCRYPTION_SECONDARY_KEY:?}
+      NEXT_PUBLIC_WEBAPP_URL: ${DOCUMENSO_URL:-https://sign.jire.ceereeze.dev}
+      NEXT_PRIVATE_INTERNAL_WEBAPP_URL: http://documenso:3000
+      NEXT_PRIVATE_DATABASE_URL: postgres://documenso:${DOCUMENSO_DB_PASSWORD:?}@postgres:5432/documenso
+      NEXT_PRIVATE_DIRECT_DATABASE_URL: postgres://documenso:${DOCUMENSO_DB_PASSWORD:?}@postgres:5432/documenso
+      NEXT_PUBLIC_DISABLE_SIGNUP: "true"
+      NEXT_PRIVATE_SMTP_TRANSPORT: smtp-auth
+      NEXT_PRIVATE_SMTP_HOST: mailpit
+      NEXT_PRIVATE_SMTP_PORT: "1025"
+      NEXT_PRIVATE_SMTP_USERNAME: ""
+      NEXT_PRIVATE_SMTP_PASSWORD: ""
+      NEXT_PRIVATE_SMTP_FROM_NAME: JIRE
+      NEXT_PRIVATE_SMTP_FROM_ADDRESS: signature@jirecanada.ca
+      # Certificat de signature : chemin documenté par Documenso (fichier UID 1001, mode 400),
+      # écrit par scripts/render-env.sh depuis 1Password.
+      NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: /opt/documenso/cert.p12
+      NEXT_PRIVATE_SIGNING_PASSPHRASE: ${DOCUMENSO_SIGNING_PASSPHRASE:?}
+    volumes:
+      - ${JIRE_STATE:-/data/jire}/documenso/cert.p12:/opt/documenso/cert.p12:ro
+    ports:
+      - "127.0.0.1:8084:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ───────────────────────── Rendez-vous ─────────────────────────
+
+  # Image officielle annoncée (hub.docker.com/r/calcom/cal.diy) mais sans aucun tag publié
+  # au 2026-10-30 : impossible d'épingler un digest. Service isolé derrière le profil
+  # « caldiy » pour que `docker compose up` fonctionne sans lui. Voir la PR.
+  caldiy:
+    <<: *common
+    profiles: [caldiy]
+    image: calcom/cal.diy:v5.6.19
+    environment:
+      <<: *tz
+      DATABASE_URL: postgres://caldiy:${CALDIY_DB_PASSWORD:?}@postgres:5432/caldiy
+      DATABASE_DIRECT_URL: postgres://caldiy:${CALDIY_DB_PASSWORD:?}@postgres:5432/caldiy
+      NEXTAUTH_SECRET: ${CALDIY_NEXTAUTH_SECRET:?}
+      CALENDSO_ENCRYPTION_KEY: ${CALDIY_ENCRYPTION_KEY:?}
+      NEXT_PUBLIC_WEBAPP_URL: ${CALDIY_URL:-https://rdv.jire.ceereeze.dev}
+      NEXTAUTH_URL: ${CALDIY_URL:-https://rdv.jire.ceereeze.dev}/api/auth
+      CALCOM_TELEMETRY_DISABLED: "1"
+      EMAIL_SERVER_HOST: mailpit
+      EMAIL_SERVER_PORT: "1025"
+      EMAIL_FROM: rdv@jirecanada.ca
+    ports:
+      - "127.0.0.1:8085:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
