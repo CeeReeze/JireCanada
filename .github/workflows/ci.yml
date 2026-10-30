@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Toujours sur tout l'historique : un secret peut atterrir n'importe où.
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.24.3
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSfL "$base/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C "$RUNNER_TEMP" gitleaks
+      - name: Scan history
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --verbose .'
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/*.sh hosts/jire/config/*/*.sh
+      - name: yamllint
+        run: pipx run yamllint --strict -c .yamllint.yml ansible hosts/jire/docker-compose.yml .github
+      - name: compose config
+        # Valeurs factices à la place des références op:// : on valide la structure, pas les secrets.
+        working-directory: hosts/jire
+        run: |
+          sed 's#op://[^ ]*#ci-dummy#' .env.template > .env
+          docker compose config --quiet
