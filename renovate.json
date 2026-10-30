@@ -1,0 +1,70 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests",
+    "customManagers:githubActionsVersions",
+    ":semanticCommitTypeAll(chore)",
+    "schedule:weekly"
+  ],
+  "timezone": "America/Toronto",
+  "labels": ["dependencies"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Cal.diy n'a pas d'image publiée (et ses tags git datent de mars 2026) : on suit la branche main de calcom/cal.diy au commit, et on garde le tag local de l'image (8 premiers caractères du commit) aligné sur le contexte de build.",
+      "managerFilePatterns": ["/^hosts/jire/docker-compose\\.yml$/"],
+      "matchStrings": [
+        "image: jire/caldiy:[0-9a-f]+\\n    build:\\n      context: https://github\\.com/calcom/cal\\.diy\\.git#(?<currentDigest>[0-9a-f]{40})"
+      ],
+      "depNameTemplate": "calcom/cal.diy",
+      "packageNameTemplate": "https://github.com/calcom/cal.diy.git",
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "main",
+      "autoReplaceStringTemplate": "image: jire/caldiy:{{{replace '^(.{8}).*$' '$1' newDigest}}}\n    build:\n      context: https://github.com/calcom/cal.diy.git#{{{newDigest}}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Scope des commits = zone touchée (Conventional Commits du dépôt).",
+      "matchManagers": ["docker-compose", "custom.regex"],
+      "matchFileNames": ["hosts/jire/**"],
+      "semanticCommitScope": "stack"
+    },
+    {
+      "matchManagers": ["github-actions", "custom.regex"],
+      "matchFileNames": [".github/**"],
+      "semanticCommitScope": "ci"
+    },
+    {
+      "matchManagers": ["ansible-galaxy"],
+      "semanticCommitScope": "ansible"
+    },
+    {
+      "description": "Les images qui ne changent que de digest (même tag reconstruit) arrivent dans une seule PR par semaine.",
+      "matchManagers": ["docker-compose"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "groupName": "digests des images"
+    },
+    {
+      "description": "Une montée majeure d'image demande une approbation dans le Dependency Dashboard : Postgres et MariaDB exigent un dump/restore, Nextcloud ne saute pas de version majeure.",
+      "matchManagers": ["docker-compose"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Nginx : rester sur les branches stables (mineure paire), pas sur mainline.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["nginx"],
+      "allowedVersions": "/^1\\.\\d*[02468](\\.|-|$)/"
+    },
+    {
+      "description": "Cal.diy bouge plusieurs fois par jour : une PR par mois suffit, et le build (15-30 min) se teste sur l'hôte avant merge.",
+      "matchDepNames": ["calcom/cal.diy"],
+      "schedule": ["* 0-5 1 * *"],
+      "commitMessageTopic": "Cal.diy",
+      "prBodyNotes": ["Rebuild requis sur l'hôte : `docker compose -f hosts/jire/docker-compose.yml build caldiy` (15-30 min, jusqu'à 6 Go de RAM)."]
+    }
+  ]
+}
