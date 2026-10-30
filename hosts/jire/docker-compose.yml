@@ -171,6 +171,10 @@ services:
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       LEAD_WEBHOOK_SECRET: ${LEAD_WEBHOOK_SECRET:?}
       ESPOCRM_INTERNAL_URL: http://espocrm
+    # Groupe des fichiers clients (voir ansible/playbook.yml). n8n tourne directement en
+    # « node » (uid 1000), sans changer d'utilisateur : le groupe ajouté par Docker reste.
+    group_add:
+      - "${JIRE_FILES_GID:-2500}"
     volumes:
       - ${JIRE_STATE:-/data/jire}/n8n:/home/node/.n8n
       - ${JIRE_FILES:-/data/jire-files}:/files
@@ -194,8 +198,14 @@ services:
   nextcloud:
     <<: *common
     image: nextcloud:34-apache@sha256:515c072ea1cf82ece3503f301fdf75dd5a7148abcc8fa10aaefd5ec56643b703
+    # www-data doit être dans le groupe des fichiers clients : group_add ne tient pas
+    # (Apache recharge les groupes), d'où ce point d'entrée. Remplacer entrypoint vide la
+    # commande de l'image : on la redonne en entier.
+    entrypoint: ["/usr/local/bin/jire-files-group.sh"]
+    command: ["/entrypoint.sh", "apache2-foreground"]
     environment:
       <<: *tz
+      JIRE_FILES_GID: ${JIRE_FILES_GID:-2500}
       MYSQL_HOST: mariadb
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
@@ -215,6 +225,7 @@ services:
       - ${JIRE_STATE:-/data/jire}/nextcloud:/var/www/html
       # Ajouté dans Nextcloud par l'app « External storage » (stockage local).
       - ${JIRE_FILES:-/data/jire-files}:/mnt/jire-files
+      - ./config/nextcloud/jire-files-group.sh:/usr/local/bin/jire-files-group.sh:ro
     ports:
       - "127.0.0.1:8082:80"
     depends_on:
@@ -227,10 +238,16 @@ services:
   nextcloud-cron:
     <<: *common
     image: nextcloud:34-apache@sha256:515c072ea1cf82ece3503f301fdf75dd5a7148abcc8fa10aaefd5ec56643b703
-    entrypoint: /cron.sh
+    # crond passe aussi à www-data via initgroups : même point d'entrée que nextcloud.
+    entrypoint: ["/usr/local/bin/jire-files-group.sh"]
+    command: ["/cron.sh"]
+    environment:
+      <<: *tz
+      JIRE_FILES_GID: ${JIRE_FILES_GID:-2500}
     volumes:
       - ${JIRE_STATE:-/data/jire}/nextcloud:/var/www/html
       - ${JIRE_FILES:-/data/jire-files}:/mnt/jire-files
+      - ./config/nextcloud/jire-files-group.sh:/usr/local/bin/jire-files-group.sh:ro
     depends_on:
       - nextcloud
 
