@@ -333,17 +333,26 @@ services:
 
   # ───────────────────────── Rendez-vous ─────────────────────────
 
-  # Image officielle annoncée (hub.docker.com/r/calcom/cal.diy) mais sans aucun tag publié
-  # au 2026-10-30 : impossible d'épingler un digest. Service isolé derrière le profil
-  # « caldiy » pour que `docker compose up` fonctionne sans lui. Voir la PR.
+  # Aucune image publiée sur hub.docker.com/r/calcom/cal.diy (0 tag au 2026-10-30) :
+  # on construit depuis le Dockerfile officiel du dépôt, épinglé sur un commit.
+  # Le build ne reçoit aucun secret (les ARG secrets du Dockerfile ont des défauts factices
+  # et restent dans l'étape builder) ; les vrais sont passés à l'exécution.
+  # Build lourd : Node 20, jusqu'à 6 Go de RAM (MAX_OLD_SPACE_SIZE), compter 15-30 min.
   caldiy:
     <<: *common
-    profiles: [caldiy]
-    image: calcom/cal.diy:v5.6.19
+    image: jire/caldiy:2e412471
+    build:
+      context: https://github.com/calcom/cal.diy.git#2e412471fc1f42c662005854a47c48128c479b0a
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_WEBAPP_URL: ${CALDIY_URL:-https://rdv.jire.ceereeze.dev}
+        CALCOM_TELEMETRY_DISABLED: "1"
     environment:
       <<: *tz
       DATABASE_URL: postgres://caldiy:${CALDIY_DB_PASSWORD:?}@postgres:5432/caldiy
       DATABASE_DIRECT_URL: postgres://caldiy:${CALDIY_DB_PASSWORD:?}@postgres:5432/caldiy
+      # Attendu par scripts/start.sh (wait-for-it) avant les migrations Prisma.
+      DATABASE_HOST: postgres:5432
       NEXTAUTH_SECRET: ${CALDIY_NEXTAUTH_SECRET:?}
       CALENDSO_ENCRYPTION_KEY: ${CALDIY_ENCRYPTION_KEY:?}
       NEXT_PUBLIC_WEBAPP_URL: ${CALDIY_URL:-https://rdv.jire.ceereeze.dev}
