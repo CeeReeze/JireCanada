@@ -42,6 +42,26 @@ Tout est lié à `127.0.0.1` ; l'exposition passe par Nginx Proxy Manager sur
 | `JIRE_CACHE` | `/cache/jire` | Jetable, jamais sauvegardé |
 | `JIRE_FILES` | `/data/jire-files` | Fichiers clients. Seul chemin qui bouge lors de la bascule vers le NAS |
 
+Pour changer un chemin, l'ajouter au `.env` rendu (ex. `JIRE_FILES=/var/mnt/jire-nas`) :
+`render-env.sh` recopie à chaque rendu les clés absentes du modèle, et les scripts
+(`backup.sh`, `restore-test.sh`, `render-env.sh`) lisent les chemins comme compose, via
+`scripts/_paths.sh` : variable du shell, sinon `.env`, sinon défaut.
+
+### Droits sur les fichiers clients
+
+n8n (uid 1000) et Nextcloud (`www-data`, uid 33) lisent et écrivent dans `JIRE_FILES`.
+Ils partagent un groupe, `jire-files`, au GID **2500** :
+
+| Où | Quoi |
+| --- | --- |
+| Hôte (Ansible) | Groupe `jire-files` (`jire_files_gid`), racine `root:jire-files` en `2770` (setgid : tout ce qui est créé dessous hérite du groupe) et ACL par défaut `g::rwx` (l'écriture de groupe est héritée malgré l'umask 022 des apps) |
+| n8n | `group_add: [JIRE_FILES_GID]` : le processus tourne directement en `node`, le groupe reste |
+| Nextcloud et son cron | Point d'entrée `config/nextcloud/jire-files-group.sh` qui ajoute `www-data` au groupe dans `/etc/group` du conteneur. `group_add` ne marche pas ici : Apache, `su` et `crond` rechargent les groupes depuis `/etc/group` en quittant root |
+| `seed-dossiers.sh` | `umask 0007` et avertissement si la racine n'a pas le setgid |
+
+`jire_files_gid` (inventaire) et `JIRE_FILES_GID` (compose, 2500 par défaut) doivent rester
+égaux. Les comptes de `jire_files_members` doivent se reconnecter pour voir le groupe.
+
 ## Démarrer (sur l'hôte)
 
 ```bash
@@ -54,6 +74,7 @@ ansible-playbook -i ansible/inventory.yml ansible/playbook.yml --check --diff
 scripts/render-env.sh
 
 # 3. Lancer la stack (le premier build de Cal.diy est long)
+docker compose -f hosts/jire/docker-compose.yml pull --ignore-buildable
 docker compose -f hosts/jire/docker-compose.yml up -d
 
 # 4. Données de test
@@ -78,8 +99,8 @@ op run --env-file=hosts/jire/restic.env.template -- scripts/restore-test.sh
 
 | Sujet | État |
 | --- | --- |
-| Droits sur `JIRE_FILES` | n8n (uid 1000) et Nextcloud (uid 33) écrivent au même endroit : il faut un groupe partagé (setgid + ACL ou `group_add`). Pas encore tranché |
-| Build Cal.diy | Pas d'image publiée, on build depuis le dépôt au commit `2e412471`. Build lourd, pas encore testé sur l'hôte |
+| Droits sur `JIRE_FILES` | Groupe partagé en place sur disque local (voir plus haut), pas encore testé sur l'hôte. Pour le NAS : même GID côté NAS, pas de `root_squash` sur la racine, et les ACL POSIX ne passent pas en NFS 4 (il faudra un umask 0007 dans n8n et `localstorage.umask` dans Nextcloud). SELinux (Bazzite) : vérifier qu'il ne faut pas `:z` sur les montages |
+| Build Cal.diy | Pas d'image publiée, on build depuis le dépôt au commit `2e412471`, `node:20` épinglé par contexte nommé. Pas encore lancé : le build pourrait exiger une BD joignable, et `NEXT_PUBLIC_DISABLE_SIGNUP` ne peut pas être passé (pas d'`ARG` dans le Dockerfile amont), donc l'inscription reste ouverte |
 | Workflow n8n d'intake | Volontairement absent : il créerait des leads EspoCRM en double avec le push direct de `sendLead` côté site |
 | Docs détaillées | `docs/architecture.md` et `docs/runbooks/bascule-nas.md` (cités dans les commentaires) sont à écrire |
 | Outillage | `infra.yml`, `justfile` et `renovate.json` (cité dans le compose) à venir |
